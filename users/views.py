@@ -131,6 +131,65 @@ def verify_email(request):
             )
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+@swagger_auto_schema(
+    method='post',
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['email'],
+        properties={
+            'email': openapi.Schema(type=openapi.TYPE_STRING, description='User email address'),
+        }
+    ),
+    responses={
+        200: openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'message': openapi.Schema(type=openapi.TYPE_STRING, description='Success message'),
+            }
+        ),
+        400: openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'error': openapi.Schema(type=openapi.TYPE_STRING, description='Error message'),
+            }
+        ),
+    },
+    operation_description="Resend verification code to user's email address"
+)
+
+
+@api_view(['POST'])
+def resend_verification(request):
+    email = request.data.get('email')
+    
+    if not email:
+        return Response(
+            {'error': 'Email is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        user = get_object_or_404(get_user_model(), email=email)
+        
+        if user.is_verified:
+            return Response(
+                {'error': 'User is already verified'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        user.send_verification_email()
+        user.save()
+        
+        return Response({
+            'message': 'Verification code has been resent to your email'
+        })
+        
+    except get_user_model().DoesNotExist:
+        return Response(
+            {'error': 'User with this email does not exist'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
 
 @swagger_auto_schema(
     method='post',
@@ -168,7 +227,7 @@ def login(request):
         return Response("Invalid credentials", status=status.HTTP_404_NOT_FOUND)
     
     # Check if user is verified
-    if not user.verified:
+    if not user.is_verified:
         return Response("Account not verified", status=status.HTTP_403_FORBIDDEN)
     
     token, created = Token.objects.get_or_create(user=user)
