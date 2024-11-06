@@ -13,30 +13,6 @@ from users.serializers import UserSerializer, VerificationSerializer, PasswordRe
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
-# response_schema = openapi.Schema(
-#     type=openapi.TYPE_OBJECT,
-#     properties={
-#         'token': openapi.Schema(type=openapi.TYPE_STRING, description='Authentication token'),
-#         'user': openapi.Schema(
-#             type=openapi.TYPE_OBJECT,
-#             properties={
-#                 'id': openapi.Schema(type=openapi.TYPE_INTEGER),
-#                 'email': openapi.Schema(type=openapi.TYPE_STRING),
-#                 'first_name': openapi.Schema(type=openapi.TYPE_STRING),
-#                 'last_name': openapi.Schema(type=openapi.TYPE_STRING),
-#             }
-#         )
-#     }
-# )
-
-# @swagger_auto_schema(
-#     method='post',
-#     request_body=UserSerializer,
-#     responses={
-#         200: response_schema,
-#         400: 'Invalid data'
-#     }
-# )
 
 user_properties = {
     'email': openapi.Schema(type=openapi.TYPE_STRING, description='User email address'),
@@ -156,8 +132,6 @@ def verify_email(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-# Login endpoint
 @swagger_auto_schema(
     method='post',
     request_body=openapi.Schema(
@@ -180,6 +154,7 @@ def verify_email(request):
             }
         ),
         404: openapi.Schema(type=openapi.TYPE_STRING, description='User not found or invalid credentials'),
+        403: openapi.Schema(type=openapi.TYPE_STRING, description='User not verified'),
     },
     operation_description="Authenticate user and retrieve token",
 )
@@ -187,9 +162,15 @@ def verify_email(request):
 @api_view(['POST'])
 def login(request):
     user = get_object_or_404(get_user_model(), email=request.data['email'])
-    print(user)
+    
+    # Check password first
     if not user.check_password(request.data['password']):
-        return Response("missing user", status=status.HTTP_404_NOT_FOUND)
+        return Response("Invalid credentials", status=status.HTTP_404_NOT_FOUND)
+    
+    # Check if user is verified
+    if not user.verified:
+        return Response("Account not verified", status=status.HTTP_403_FORBIDDEN)
+    
     token, created = Token.objects.get_or_create(user=user)
     serializer = UserSerializer(user)
     return Response({'token': token.key, 'user': serializer.data})
