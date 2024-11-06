@@ -29,7 +29,7 @@ schema_view = get_schema_view(
       description="API documentation for the ALX Connect project",
       terms_of_service="https://www.google.com/policies/terms/",
       contact=openapi.Contact(email="contact@alxconnect.com"),
-      license=openapi.License(name="MIT"),
+      license=openapi.License(name="MIT License"),
    ),
    public=True,
    permission_classes=[permissions.AllowAny],
