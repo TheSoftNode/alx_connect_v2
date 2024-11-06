@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from rest_framework.authtoken.models import Token
 
-from users.serializers import UserSerializer
+from users.serializers import UserSerializer, VerificationSerializer
 
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -47,6 +47,7 @@ def signup(request):
         user.set_password(request.data['password'])
         user.first_name = request.data['first_name']  
         user.last_name = request.data['last_name']   
+        user.send_verification_email()
         user.save()
         token = Token.objects.create(user=user)
         return Response({
@@ -56,10 +57,32 @@ def signup(request):
                 'first_name': user.first_name,
                 'last_name': user.last_name,
                 **serializer.data
-            }
+            },
+            'message': 'Please check your email for verification code'
         })
     print(serializer.errors)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+def verify_email(request):
+    serializer = VerificationSerializer(data=request.data)
+    if serializer.is_valid():
+        try:
+            user = get_user_model().objects.get(
+                email=serializer.validated_data['email'],
+                verification_code=serializer.validated_data['verification_code']
+            )
+            user.is_verified = True
+            user.verification_code = None
+            user.save()
+            return Response({'message': 'Email verified successfully'})
+        except get_user_model().DoesNotExist:
+            return Response(
+                {'error': 'Invalid verification code'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(['POST'])
