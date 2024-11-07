@@ -25,7 +25,7 @@ from . import views
 
 urlpatterns = [
     re_path('token/access', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    re_path('token/refresh', TokenRefreshView.as_view(), name='token_refresh'),
+    re_path('token/refresh', views.token_refresh, name='token_refresh'),
     re_path('signup', views.signup),
     re_path('login', views.login),
     re_path('test_token', views.test_token),

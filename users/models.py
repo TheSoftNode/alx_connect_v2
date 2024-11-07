@@ -5,6 +5,8 @@ from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.conf import settings
+from django.core.mail import EmailMessage
+from django.template.loader import render_to_string
 import random
 
 
@@ -58,17 +60,26 @@ class CustomUser(AbstractUser):
         return self.first_name
     
     def send_verification_email(self):
+        # Generate a random verification code
         code = ''.join(random.choices('0123456789', k=6))
         self.verification_code = code
         self.save()
-        
-        send_mail(
-            'Verify Your Email',
-            f'Your verification code is: {code}',
-            settings.DEFAULT_FROM_EMAIL,
-            [self.email],
-            fail_silently=False,
+
+        # Prepare email subject
+        subject = 'Verify Your Email'
+
+        # Prepare HTML content for the email
+        html_content = render_to_string('emails/verification_email.html', {'verification_code': code})
+
+        # Create the email message
+        email = EmailMessage(
+            subject,
+            html_content,
+            settings.DEFAULT_FROM_EMAIL,  
+            [self.email],  # Recipient's email
         )
+        email.content_subtype = 'html'  # Make the email HTML formatted
+        email.send(fail_silently=False)
 
     def send_reset_password_email(self):
         token = default_token_generator.make_token(self)
