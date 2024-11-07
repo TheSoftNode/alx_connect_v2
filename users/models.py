@@ -29,6 +29,7 @@ class CustomUserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 
+
 class CustomUser(AbstractUser):
     username = None
     email = models.EmailField(_('email address'), unique=True)
@@ -81,3 +82,13 @@ class CustomUser(AbstractUser):
             [self.email],
             fail_silently=False,
         )
+
+class RefreshUserToken(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='refresh_tokens')
+    token = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    revoked = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Token for {self.user.email} (Revoked: {self.revoked})"
