@@ -18,6 +18,7 @@ user_properties = {
     'email': openapi.Schema(type=openapi.TYPE_STRING, description='User email address'),
     'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='User first name'),
     'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='User last name'),
+    'verification_code': openapi.Schema(type=openapi.TYPE_STRING, description='6-digit verification code'),
 }
 
 error_response = openapi.Schema(
@@ -31,6 +32,14 @@ success_message_response = openapi.Schema(
     type=openapi.TYPE_OBJECT,
     properties={
         'message': openapi.Schema(type=openapi.TYPE_STRING, description='Success message'),
+    }
+)
+
+success_password_reset = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    properties={
+        'message': openapi.Schema(type=openapi.TYPE_STRING, description='Success message'),
+        'reset_password_token': openapi.Schema(type=openapi.TYPE_STRING, description='Password reset token'),
     }
 )
 
@@ -86,6 +95,7 @@ def signup(request):
                 'email': user.email,
                 'first_name': user.first_name,
                 'last_name': user.last_name,
+                'verification_code': user.verification_code,
                 **serializer.data
             },
             'message': 'Please check your email for verification code'
@@ -144,6 +154,7 @@ def verify_email(request):
         200: openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
+                'verification_code': openapi.Schema(type=openapi.TYPE_STRING, description='New verification code'),
                 'message': openapi.Schema(type=openapi.TYPE_STRING, description='Success message'),
             }
         ),
@@ -181,6 +192,7 @@ def resend_verification(request):
         user.save()
         
         return Response({
+            'verification_code': user.verification_code,
             'message': 'Verification code has been resent to your email'
         })
         
@@ -273,8 +285,10 @@ def test_token(request):
             'email': openapi.Schema(type=openapi.TYPE_STRING, description='User email address'),
         }
     ),
+
+    
     responses={
-        200: success_message_response,
+        200: success_password_reset,
         404: error_response,
         400: error_response,
     },
@@ -288,7 +302,10 @@ def request_password_reset(request):
         try:
             user =  get_user_model().objects.get(email=serializer.validated_data['email'])
             user.send_reset_password_email()
-            return Response({'message': 'Password reset email sent'})
+            return Response({
+                'message': 'Password reset email sent',
+                'reset_password_token': user.reset_password_token
+                })
         except  get_user_model().DoesNotExist:
             return Response(
                 {'error': 'User not found'},
