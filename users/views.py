@@ -1,6 +1,5 @@
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
@@ -8,12 +7,17 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from django.utils import timezone
 from .models import RefreshUserToken
+from django.utils.http import urlsafe_base64_decode
 
 
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 
-from users.serializers import UserSerializer, VerificationSerializer, PasswordResetRequestSerializer, PasswordResetConfirmSerializer, ChangePasswordSerializer
+from users.serializers import (UserSerializer, 
+                               VerificationSerializer, 
+                               PasswordResetRequestSerializer, 
+                               PasswordResetConfirmSerializer, 
+                               ChangePasswordSerializer)
 
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -116,7 +120,7 @@ def signup(request):
                 'email': user.email,
                 'first_name': user.first_name,
                 'last_name': user.last_name,
-                'verification_code': user.verification_code,
+                'verification_token': user.verification_token,
                 **serializer.data
             },
             'message': 'Please check your email for verification code'
@@ -144,23 +148,44 @@ def signup(request):
 
 @api_view(['POST'])
 def verify_email(request):
-    serializer = VerificationSerializer(data=request.data)
+    # Check if token and email are provided in the request
+    token = request.data.get("token")
+    email_encoded = request.data.get("email")
+
+    if not token or not email_encoded:
+        return Response({'error': 'Invalid link'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Decode the email
+    email = urlsafe_base64_decode(email_encoded).decode()
+
+    # Initialize the serializer with decoded email and token
+    serializer = VerificationSerializer(data={'email': email, 'token': token})
+    print(serializer.is_valid())
+
+    print(email, token)  # Debugging output to check email and token
+
+    # Validate serializer data
     if serializer.is_valid():
         try:
+            # Find the user with the matching email and token
             user = get_user_model().objects.get(
-                email=serializer.validated_data['email'],
-                verification_code=serializer.validated_data['verification_code']
+                email=email,
+                verification_token=token
             )
+
+            # Update user status and remove the verification token
             user.is_verified = True
-            user.verification_code = None
+            user.verification_token = None
             user.save()
+
             return Response({'message': 'Email verified successfully'})
+        
         except get_user_model().DoesNotExist:
-            return Response(
-                {'error': 'Invalid verification code'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Invalid token or email'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @swagger_auto_schema(
     method='post',
@@ -213,7 +238,6 @@ def resend_verification(request):
         user.save()
         
         return Response({
-            'verification_code': user.verification_code,
             'message': 'Verification code has been resent to your email'
         })
         
@@ -314,7 +338,7 @@ def request_password_reset(request):
             user.send_reset_password_email()
             return Response({
                 'message': 'Password reset email sent',
-                'reset_password_token': user.reset_password_token
+                # 'reset_password_token': user.reset_password_token
                 })
         except  get_user_model().DoesNotExist:
             return Response(
@@ -344,14 +368,27 @@ def request_password_reset(request):
 
 @api_view(['POST'])
 def reset_password(request):
-    serializer = PasswordResetConfirmSerializer(data=request.data)
+    token = request.data.get("token")
+    email_encoded = request.data.get("email")
+    new_password = request.data.get("new_password")
+
+    if not token or not email_encoded:
+        return Response({'error': 'Invalid link'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Decode the email
+    email = urlsafe_base64_decode(email_encoded).decode()
+
+    # Initialize the serializer with decoded email and token
+    serializer = PasswordResetConfirmSerializer(data={'email': email, 'token': token, 'new_password': new_password})
+
     if serializer.is_valid():
         try:
             user =  get_user_model().objects.get(
-                email=serializer.validated_data['email'],
-                reset_password_token=serializer.validated_data['token']
+                email=email,
+                reset_password_token=token
             )
-            user.set_password(serializer.validated_data['new_password'])
+           
+            user.set_password(new_password)
             user.reset_password_token = None
             user.save()
             return Response({'message': 'Password reset successful'})
@@ -462,30 +499,42 @@ def test_token(request):
 def token_refresh(request):
     serializer = TokenRefreshSerializer(data=request.data)
 
-    try:
-        serializer.is_valid(raise_exception=True)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    if not serializer.is_valid():
+        return Response({
+            'error': 'Invalid refresh token format',
+            'details': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
-    # Check if the refresh token is valid and exists in the database
-    refresh_token = serializer.validated_data['refresh']
     try:
-        refresh_token_obj = RefreshUserToken.objects.get(token=refresh_token, revoked=False, expires_at__gt=timezone.now())
+        # Get the refresh token from validated data
+        refresh_token = request.data.get('refresh')
+        
+        # Check if the refresh token exists and is valid in the database
+        refresh_token_obj = RefreshUserToken.objects.get(
+            token=refresh_token,
+            revoked=False,
+            expires_at__gt=timezone.now()
+        )
+
+        # Generate new access token
+        refresh = RefreshToken(refresh_token_obj.token)
+        new_access_token = str(refresh.access_token)
+
+        # Update the refresh token expiration
+        refresh_token_obj.expires_at = timezone.now() + refresh.lifetime
+        refresh_token_obj.save()
+
+        return Response({'access': new_access_token})
+
     except RefreshUserToken.DoesNotExist:
-        return Response({'error': 'Invalid refresh token'}, status=status.HTTP_400_BAD_REQUEST)
-
-    # Generate a new access token
-    refresh = RefreshToken(refresh_token_obj.token)
-    new_access_token = str(refresh.access_token)
-
-    # Calculate expiration time using the token's lifetime
-    expires_at = timezone.now() + refresh.lifetime
-
-    # Update the refresh token expiration
-    refresh_token_obj.expires_at = timezone.now() + expires_at
-    refresh_token_obj.save()
-
-    return Response({'access': new_access_token})
+        return Response({
+            'error': 'Invalid or expired refresh token'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'error': 'Token refresh failed',
+            'details': str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 
 @swagger_auto_schema(

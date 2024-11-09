@@ -7,6 +7,9 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.core.mail import EmailMessage
 from django.template.loader import render_to_string
+import uuid
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
 import random
 
 
@@ -38,7 +41,7 @@ class CustomUser(AbstractUser):
     first_name = models.CharField(_('first name'), max_length=150, blank=False)  
     last_name = models.CharField(_('last name'), max_length=150, blank=False)   
     is_verified = models.BooleanField(default=False)
-    verification_code = models.CharField(max_length=6, null=True, blank=True)
+    verification_token = models.CharField(max_length=6, null=True, blank=True)
     reset_password_token = models.CharField(max_length=100, null=True, blank=True)
 
     USERNAME_FIELD = 'email'
@@ -60,16 +63,19 @@ class CustomUser(AbstractUser):
         return self.first_name
     
     def send_verification_email(self):
-        # Generate a random verification code
-        code = ''.join(random.choices('0123456789', k=6))
-        self.verification_code = code
+        # Generate a unique token for the user
+        token = str(uuid.uuid4())
+        self.verification_token = token
         self.save()
+
+        # Construct the verification URL
+        verification_url = f"{settings.FRONTEND_URL}/users/verify-email?token={token}&email={urlsafe_base64_encode(force_bytes(self.email))}"
 
         # Prepare email subject
         subject = 'Verify Your Email'
 
         # Prepare HTML content for the email
-        html_content = render_to_string('emails/verification_email.html', {'verification_code': code})
+        html_content = render_to_string('emails/verification_email.html', {'verification_url': verification_url})
 
         # Create the email message
         email = EmailMessage(
@@ -80,19 +86,31 @@ class CustomUser(AbstractUser):
         )
         email.content_subtype = 'html'  # Make the email HTML formatted
         email.send(fail_silently=False)
+        
 
     def send_reset_password_email(self):
         token = default_token_generator.make_token(self)
         self.reset_password_token = token
         self.save()
+
+        password_reset_url = f"{settings.FRONTEND_URL}/users/reset-password?token={token}&email={urlsafe_base64_encode(force_bytes(self.email))}"
         
-        send_mail(
-            'Reset Your Password',
-            f'Use this token to reset your password: {token}',
-            settings.DEFAULT_FROM_EMAIL,
-            [self.email],
-            fail_silently=False,
+         # Prepare email subject
+        subject = 'reset your password'
+
+        # Prepare HTML content for the email
+        html_content = render_to_string('emails/password_reset.html', {'password_reset_url': password_reset_url})
+
+        # Create the email message
+        email = EmailMessage(
+            subject,
+            html_content,
+            settings.DEFAULT_FROM_EMAIL,  
+            [self.email], 
         )
+        email.content_subtype = 'html'  
+        email.send(fail_silently=False)
+
 
 class RefreshUserToken(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='refresh_tokens')

@@ -15,10 +15,13 @@ class UserSerializer(serializers.ModelSerializer):
 
 class VerificationSerializer(serializers.Serializer):
     email = serializers.EmailField()
-    verification_code = serializers.CharField(max_length=6)
+    token = serializers.CharField()
 
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
+
+class TokenRefreshSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
     email = serializers.EmailField()

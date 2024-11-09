@@ -26,8 +26,16 @@ SECRET_KEY = 'django-insecure-3oxs@e1fjxzt$t%fqaf&0s@dp79^g*l4ubu0$cykhrx0wpulg@
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = [
+#     " http://localhost:5173"
+# ]
+# if DEBUG:
+#     ALLOWED_HOSTS = ["*"]
 
+# CSRF_TRUSTED_ORIGINS = [
+#     "http://localhost:5173/"
+#     "http://127.0.0.1:3000"
+# ]
 
 # Application definition
 
@@ -38,6 +46,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
     'users',
@@ -47,6 +56,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -85,6 +95,10 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': datetime.timedelta(minutes=1),  
     'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=1),     
 }
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  
+]
 
 
 # Database
@@ -142,14 +156,25 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTHENTICATION_BACKENDS = ['users.auth_backends.EmailBackend']
 
-# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+FRONTEND_URL = 'http://localhost:5173'
 
+CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOW_METHODS = [
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "OPTIONS",
+]
+
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True 
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True 
 EMAIL_HOST_USER = 'thesoftnode@gmail.com'  
 EMAIL_HOST_PASSWORD = 'jxcmalfxhacseuxp' 
 DEFAULT_FROM_EMAIL = 'thesoftnode@gmail.com'  
